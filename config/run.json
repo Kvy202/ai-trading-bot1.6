@@ -1,0 +1,6 @@
+﻿{
+  "risk": {
+    "max_pos_usd": 100,
+    "max_symbols": 1
+  }
+}

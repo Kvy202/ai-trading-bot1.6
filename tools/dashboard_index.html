@@ -1,0 +1,128 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>AI Bot — Live Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 16px; background:#0b0f14; color:#e6e6e6; }
+    h1 { margin: 0 0 8px 0; font-size: 20px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .card { background: #121923; border: 1px solid #1f2a37; border-radius: 12px; padding: 12px; box-shadow: 0 0 0 rgba(0,0,0,0); transition: box-shadow 0.4s ease; }
+    .card.flash { box-shadow: 0 0 18px rgba(0,200,255,0.35); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 6px 8px; border-bottom: 1px solid #1f2a37; text-align: left; }
+    th { color:#93a4b8; font-weight:600; }
+    .pos-row.up { animation: glowUp 0.8s; }
+    .pos-row.down { animation: glowDown 0.8s; }
+    @keyframes glowUp { from { background:#0b3d22; } to { background:transparent; } }
+    @keyframes glowDown { from { background:#3d0b0b; } to { background:transparent; } }
+    .green { color:#44d07b; }
+    .red { color:#ff5c5c; }
+    .muted { color:#9aa9ba; }
+    .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+    .pill { background:#1f2a37; padding:4px 8px; border-radius:999px; font-size:12px; color:#c7d2de; }
+    .pill .label { color:#93a4b8; margin-right:6px; }
+    .wrap { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>AI Trading Bot — Live Dashboard <span id="ts" class="pill"></span></h1>
+    <div class="wrap">
+      <div class="pill"><span class="label">updates</span>every 1s</div>
+      <div class="pill"><span class="label">exec thr</span><span id="execThr">—</span> (<span id="execMode">—</span>)</div>
+      <div class="pill"><span class="label">Realized (today)</span><span id="realized">0</span></div>
+      <div class="pill"><span class="label">Unrealized</span><span id="unrl">0</span></div>
+    </div>
+  </div>
+  <div class="grid">
+    <div id="card-positions" class="card">
+      <div class="header"><div>Open Positions</div></div>
+      <table id="tbl-pos"><thead><tr><th>Symbol</th><th>Side</th><th>Qty</th><th>Avg</th><th>Last</th><th>Unrealized</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div id="card-signals" class="card">
+      <div class="header"><div>Latest Signals</div></div>
+      <table id="tbl-sig"><thead><tr><th>ts</th><th>symbol</th><th>p_meta</th><th>rv</th><th>writer_thr</th><th>eff_thr</th><th>pass</th><th>allow</th><th>mode</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div id="card-recent" class="card">
+      <div class="header"><div>Recent Paper Trades</div></div>
+      <table id="tbl-recent"><thead><tr><th>ts</th><th>symbol</th><th>side</th><th>price</th><th>qty</th><th>reason</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div id="card-closed" class="card">
+      <div class="header"><div>Closed Trades (PnL)</div></div>
+      <table id="tbl-closed"><thead><tr><th>ts</th><th>symbol</th><th>side</th><th>qty</th><th>entry</th><th>exit</th><th>realized</th><th>reason</th></tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+  <script>
+    function fmt(x){ return (typeof x==="number")? x.toFixed(6): x; }
+    function clsPnL(v){ return (parseFloat(v)||0)>=0 ? "green" : "red"; }
+
+    async function refresh(){
+      const r = await fetch("/api/state", {cache:"no-store"});
+      const j = await r.json();
+
+      document.getElementById("ts").textContent = j.ts;
+      document.getElementById("execThr").textContent = fmt(j.totals.exec_thr);
+      document.getElementById("execMode").textContent = j.totals.exec_mode;
+      document.getElementById("realized").textContent = fmt(j.totals.realized_sum_today);
+
+      // positions
+      const tb = document.querySelector("#tbl-pos tbody"); tb.innerHTML="";
+      let sum = 0;
+      Object.entries(j.positions).forEach(([sym,p])=>{
+        sum += p.unrealized;
+        const tr = document.createElement("tr");
+        tr.className = "pos-row " + (p.unrealized>=0? "up":"down");
+        tr.innerHTML = `
+          <td>${sym}</td>
+          <td>${p.side||"-"}</td>
+          <td>${fmt(p.qty)}</td>
+          <td>${fmt(p.avg)}</td>
+          <td>${fmt(p.last_price)}</td>
+          <td class="${clsPnL(p.unrealized)}">${fmt(p.unrealized)}</td>`;
+        tb.appendChild(tr);
+      });
+      const un = document.getElementById("unrl");
+      if (un.textContent !== fmt(sum)) {
+        const el = document.getElementById("card-positions");
+        el.classList.add("flash");
+        setTimeout(()=>el.classList.remove("flash"), 350);
+      }
+      un.textContent = fmt(sum);
+
+      // signals (+ effective threshold & pass)
+      const tsig = document.querySelector("#tbl-sig tbody"); tsig.innerHTML="";
+      j.signals.forEach(s=>{
+        const tr = document.createElement("tr");
+        const pass = s.pass_exec ? "✅" : "❌";
+        tr.innerHTML = `<td>${s.ts}</td><td>${s.symbol}</td><td>${s.p_meta}</td><td>${s.rv_mean}</td>
+                        <td>${s.thr}</td><td>${fmt(s.eff_thr)}</td><td>${pass}</td>
+                        <td>${s.allow}</td><td>${s.mode}</td>`;
+        tsig.appendChild(tr);
+      });
+
+      // recent trades
+      const trec = document.querySelector("#tbl-recent tbody"); trec.innerHTML="";
+      j.recent_trades.forEach(t=>{
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${t.ts}</td><td>${t.symbol}</td><td>${t.side}</td>
+                        <td>${fmt(t.price)}</td><td>${fmt(t.qty)}</td><td class="muted">${t.reason}</td>`;
+        trec.appendChild(tr);
+      });
+
+      // closed trades
+      const tcl = document.querySelector("#tbl-closed tbody"); tcl.innerHTML="";
+      j.closed_trades.forEach(t=>{
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${t.ts}</td><td>${t.symbol}</td><td>${t.side}</td>
+                        <td>${fmt(t.qty)}</td><td>${fmt(t.entry_avg)}</td><td>${fmt(t.exit_price)}</td>
+                        <td class="${clsPnL(t.realized_pnl)}">${fmt(t.realized_pnl)}</td><td class="muted">${t.reason}</td>`;
+        tcl.appendChild(tr);
+      });
+    }
+    setInterval(refresh, 1000);
+    refresh();
+  </script>
+</body>
+</html>

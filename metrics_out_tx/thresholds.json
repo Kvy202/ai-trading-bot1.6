@@ -1,0 +1,5 @@
+{
+  "suggested_bucket": "p95",
+  "threshold_value": 0.42807966470718384,
+  "reason": "Meets sharpe criterion with enough live coverage (n_live=0)"
+}

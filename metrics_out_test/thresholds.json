@@ -1,0 +1,5 @@
+{
+  "suggested_bucket": "p50",
+  "threshold_value": 0.4235538840293884,
+  "reason": "No live coverage; defaulting to p50"
+}
