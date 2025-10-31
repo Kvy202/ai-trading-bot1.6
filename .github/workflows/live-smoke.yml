@@ -12,7 +12,7 @@ on:
 jobs:
   win:
     runs-on: windows-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
 
     defaults:
       run:
@@ -21,17 +21,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: Setup Python 3.10
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+          cache: 'pip'
+          cache-dependency-path: |
+            requirements.txt
 
-      # (replace the install section)
       - name: Create venv & install deps (CPU)
         run: |
           python -m venv .venv
           .\.venv\Scripts\python -m pip install --upgrade pip
-          # Install torch CPU FIRST from the official index
+          # Install torch CPU FIRST from official index
           .\.venv\Scripts\python -m pip install --index-url https://download.pytorch.org/whl/cpu torch==2.4.1 torchvision==0.19.1 torchaudio==2.4.1
           # Then install your requirements but SKIP torch (avoid conflicts)
           (Get-Content requirements.txt) -notmatch '^torch' | Set-Content requirements_no_torch.txt
@@ -43,31 +45,46 @@ jobs:
           if (Test-Path logs\live_writer.lock)  { Remove-Item -Force logs\live_writer.lock }
           if (Test-Path logs\live_executor.lock){ Remove-Item -Force logs\live_executor.lock }
 
-      # make writer permissive so trades can happen
+      # Make writer permissive so a short smoke can generate signals
       - name: Env for run
         run: |
-          "DL_ALLOW_ONLY=0"  | Out-File -FilePath $env:GITHUB_ENV -Append
+          "DL_ALLOW_ONLY=0"   | Out-File -FilePath $env:GITHUB_ENV -Append
           "DL_WRITER_SLEEP=2" | Out-File -FilePath $env:GITHUB_ENV -Append
-
-      # also include echo-based variant as requested
-      - name: Env for run (echo variant)
-        run: |
-          echo "DL_ALLOW_ONLY=0" | Out-File -FilePath $env:GITHUB_ENV -Append
-          echo "DL_WRITER_SLEEP=2" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Start live (background)
         run: |
           .\.venv\Scripts\python --version
           pwsh .\tools\start_live.ps1 -Force -FreshLogs -ShowStatus -Plong 0.43 -Pmode abs -Cooldown 3 -MaxSymbols 2
 
-      - name: Let it run for ~45s
-        run: Start-Sleep -Seconds 45
+      - name: Let it run ~90s
+        run: Start-Sleep -Seconds 90
 
       - name: Stop live & show tail
         if: always()
         run: |
           pwsh .\tools\stop_live.ps1 -AlsoDashboard
-          Get-ChildItem logs | % { Write-Host "==> $($_.Name)"; Get-Content $_.FullName -Tail 40 }
+          Write-Host "`n===== FILE LIST ====="
+          Get-ChildItem logs | % { Write-Host $_.FullName }
+          Write-Host "`n===== TAIL OUT/ERR ====="
+          Get-ChildItem logs\*.out,logs\*.err -ErrorAction SilentlyContinue | % {
+            Write-Host "`n==> $($_.Name)"
+            Get-Content $_.FullName -Tail 80
+          }
+          Write-Host "`n===== TAIL SIGNALS/META ====="
+          Get-ChildItem logs\live_signals.csv,logs\live_meta_log_*.csv -ErrorAction SilentlyContinue | % {
+            Write-Host "`n==> $($_.Name)"
+            Get-Content $_.FullName -Tail 60
+          }
+          Write-Host "`n===== TAIL TRADES ====="
+          Get-ChildItem logs\trades_paper_*.csv,logs\trades_closed_*.csv -ErrorAction SilentlyContinue | % {
+            Write-Host "`n==> $($_.Name)"
+            Get-Content $_.FullName -Tail 60
+          }
+          Write-Host "`n===== STATE / HEARTBEAT ====="
+          Get-ChildItem logs\executor_state.json,logs\live_writer_heartbeat.json -ErrorAction SilentlyContinue | % {
+            Write-Host "`n==> $($_.Name)"
+            Get-Content $_.FullName -Tail 60
+          }
 
       - name: Upload logs
         if: always()
@@ -75,3 +92,4 @@ jobs:
         with:
           name: live-logs
           path: logs/*
+          retention-days: 7
