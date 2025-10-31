@@ -32,11 +32,11 @@ jobs:
       - name: Create venv & install deps (CPU)
         run: |
           python -m venv .venv
-          .\.venv\Scripts\python -m pip install --upgrade pip
-          # Install torch CPU FIRST from official index
+          .\.venv\Scripts\python -m pip install --upgrade pip wheel setuptools
+          # Install Torch CPU FIRST from official CPU index (versions match Py 3.10)
           .\.venv\Scripts\python -m pip install --index-url https://download.pytorch.org/whl/cpu torch==2.4.1 torchvision==0.19.1 torchaudio==2.4.1
-          # Then install your requirements but SKIP torch (avoid conflicts)
-          (Get-Content requirements.txt) -notmatch '^torch' | Set-Content requirements_no_torch.txt
+          # Then install your requirements but SKIP torch line (avoid conflicts)
+          (Get-Content requirements.txt) -notmatch '^\s*torch' | Set-Content requirements_no_torch.txt
           .\.venv\Scripts\python -m pip install -r requirements_no_torch.txt
 
       - name: Prep logs
@@ -45,7 +45,6 @@ jobs:
           if (Test-Path logs\live_writer.lock)  { Remove-Item -Force logs\live_writer.lock }
           if (Test-Path logs\live_executor.lock){ Remove-Item -Force logs\live_executor.lock }
 
-      # Make writer permissive so a short smoke can generate signals
       - name: Env for run
         run: |
           "DL_ALLOW_ONLY=0"   | Out-File -FilePath $env:GITHUB_ENV -Append
