@@ -49,6 +49,12 @@ jobs:
           "DL_ALLOW_ONLY=0"  | Out-File -FilePath $env:GITHUB_ENV -Append
           "DL_WRITER_SLEEP=2" | Out-File -FilePath $env:GITHUB_ENV -Append
 
+      # also include echo-based variant as requested
+      - name: Env for run (echo variant)
+        run: |
+          echo "DL_ALLOW_ONLY=0" | Out-File -FilePath $env:GITHUB_ENV -Append
+          echo "DL_WRITER_SLEEP=2" | Out-File -FilePath $env:GITHUB_ENV -Append
+
       - name: Start live (background)
         run: |
           .\.venv\Scripts\python --version
