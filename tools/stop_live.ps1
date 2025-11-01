@@ -11,6 +11,11 @@ $logsDir       = Join-Path $root 'logs'
 $executorLock  = Join-Path $logsDir 'live_executor.lock'
 $writerLock    = Join-Path $logsDir 'live_writer.lock'
 
+# Make sure logs dir exists to avoid downstream errors
+if (-not (Test-Path $logsDir)) {
+  try { New-Item -ItemType Directory -Force -Path $logsDir | Out-Null } catch {}
+}
+
 # Compile-time regex targets (Windows-style / cross-sep)
 $rxLive = 'tools(\\|/)live_(writer|executor)\.py'
 $rxDash = 'tools(\\|/)dashboard\.py'
@@ -26,9 +31,7 @@ function Get-ProcsByRegex([string]$regex, [string]$scopePath) {
 }
 
 function Stop-ByPid([int]$TargetPid) {
-  try {
-    $null = Get-Process -Id $TargetPid -ErrorAction Stop
-  } catch { return $false }
+  try { $null = Get-Process -Id $TargetPid -ErrorAction Stop } catch { return $false }
   try {
     Stop-Process -Id $TargetPid -Force -ErrorAction Stop
     Write-Host "[stop_live] stopped PID=${TargetPid}"
@@ -72,9 +75,7 @@ function Stop-FromLock([string]$lockPath) {
     $pidVal = [int]($txt -split ',')[0]
     Stop-Tree -ProcId $pidVal | Out-Null
     return $true
-  } catch {
-    return $false
-  }
+  } catch { return $false }
 }
 
 # ---------- 1) Kill live writer & executor ----------
