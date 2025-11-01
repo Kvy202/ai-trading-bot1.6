@@ -11,7 +11,7 @@ $logsDir       = Join-Path $root 'logs'
 $executorLock  = Join-Path $logsDir 'live_executor.lock'
 $writerLock    = Join-Path $logsDir 'live_writer.lock'
 
-# Make sure logs dir exists to avoid downstream errors
+# Ensure logs directory exists
 if (-not (Test-Path $logsDir)) {
   try { New-Item -ItemType Directory -Force -Path $logsDir | Out-Null } catch {}
 }
@@ -75,7 +75,9 @@ function Stop-FromLock([string]$lockPath) {
     $pidVal = [int]($txt -split ',')[0]
     Stop-Tree -ProcId $pidVal | Out-Null
     return $true
-  } catch { return $false }
+  } catch {
+    return $false
+  }
 }
 
 # ---------- 1) Kill live writer & executor ----------
